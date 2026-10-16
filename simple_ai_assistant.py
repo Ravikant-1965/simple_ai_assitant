@@ -10,21 +10,32 @@ client = OpenAI(   # if the module is kept empty then it will automatically star
 )
 
 
+messages = []
+
 while True:
     user_input = input("Ravi: ")
 
     if user_input.lower() in ["Exit", "Bye", "quit"]:
         break
 
-    response = client.chat.completions.create( 
-        model=os.getenv("MODEL"),
-        messages=[
-            {
-                "role":"user",
-                "content":user_input
-            }
-        ]
+    messages.append(
+        {
+            "role":"user",
+            "content":user_input
+        }
     )
 
-    print(response.choices[0].message.content)
+    response = client.chat.completions.create( 
+        model=os.getenv("MODEL"),
+        messages=messages
+    )
+
+    messages.append(
+        {
+            "role":"assistant",
+            "content":response.choices[0].message.content
+        }
+    )
+
+    print(f"AI : {response.choices[0].message.content}")
 
