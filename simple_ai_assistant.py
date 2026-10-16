@@ -12,10 +12,17 @@ client = OpenAI(   # if the module is kept empty then it will automatically star
 
 messages = []
 
+messages.append(
+    {
+        "role":"system",
+        "content":"You are humble assitant. Resopond within 20 words"
+    }
+)
+
 while True:
     user_input = input("Ravi: ")
 
-    if user_input.lower() in ["Exit", "Bye", "quit"]:
+    if user_input.lower() in ["exit", "bye", "quit"]:
         break
 
     messages.append(
