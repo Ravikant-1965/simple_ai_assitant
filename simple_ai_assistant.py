@@ -1,10 +1,12 @@
+#standard library Imports
+import os
+# Third party imports
 from openai import OpenAI
 from dotenv import load_dotenv
-import json
+# Local Module imports
+from tools import TOOLS, execute_tool_call
+from Utilities.utilities import log
 
-from tools import TOOLS, FUNCTION_NAME_TO_FUNCTION_MAP
-
-import os
 
 load_dotenv() #by default looks for .env file
 
@@ -48,23 +50,18 @@ while True:
 
         msg = response.choices[0].message
 
+        if not msg.tool_calls:
+            break
+
+
+        log(f"Step {steps+1}: model requested {len(msg.tool_calls)} tool calls")
+        
+
         messages.append(msg)
 
         for tool_call in msg.tool_calls:
 
-            func_name = tool_call.function.name
-            func_args = {}
-
-            try:
-                func_args = json.loads(tool_call.function.arguments or "{}")
-
-                fn = FUNCTION_NAME_TO_FUNCTION_MAP[func_name]
-
-                result = fn(**func_args)
-            
-            except Exception as e :
-                result = f"Error while running {func_name} : {e}"
-
+            result = execute_tool_call(tool_call)
 
             messages.append(
                 {
@@ -92,4 +89,4 @@ while True:
         }
     )
 
-    print(f"AI: {msg.content}")
+    print(f"AI: {msg.content or ''}")
