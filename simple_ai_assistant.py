@@ -13,7 +13,6 @@ client = OpenAI(   # if the module is kept empty then it will automatically star
     api_key=os.getenv("API_KEY"),
 )
 
-
 messages = []
 
 messages.append(
@@ -36,8 +35,10 @@ while True:
         }
     )
 
+    MAX_STEPS = 5
+
     #chained tool calling
-    while True:
+    for steps in range(MAX_STEPS):
 
         response = client.chat.completions.create( 
             model=os.getenv("MODEL"),
@@ -52,12 +53,18 @@ while True:
         for tool_call in msg.tool_calls:
 
             func_name = tool_call.function.name
+            func_args = {}
 
-            func_args = json.loads(tool_call.function.arguments or "{}")
+            try:
+                func_args = json.loads(tool_call.function.arguments or "{}")
 
-            fn = FUNCTION_NAME_TO_FUNCTION_MAP[func_name]
+                fn = FUNCTION_NAME_TO_FUNCTION_MAP[func_name]
 
-            result = fn(**func_args)
+                result = fn(**func_args)
+            
+            except Exception as e :
+                result = f"Error while running {func_name} : {e}"
+
 
             messages.append(
                 {
@@ -67,6 +74,17 @@ while True:
                 }
             )
 
+    else:
+        fallback = "Sorry i couldn't finish this within the steps limit"
+        messages.append({
+            "role":"assistant",
+            "content":fallback
+        })
+
+        print(f"AI:{fallback}")
+        continue
+
+
     messages.append(
         {
             "role": "assistant",
@@ -75,5 +93,3 @@ while True:
     )
 
     print(f"AI: {msg.content}")
-
-        
