@@ -1,7 +1,7 @@
 from datetime import datetime
 import requests
 import json
-from logger import log
+from Utilities.utilities import log
 
 # 1. Actual Python function definition
 # This is the real code that runs locally on our machine when called.

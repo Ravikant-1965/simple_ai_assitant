@@ -1,5 +1,6 @@
 #standard library Imports
 import os
+from types import SimpleNamespace
 # Third party imports
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -20,9 +21,86 @@ messages = []
 messages.append(
     {
         "role":"system",
-        "content":"You are humble assitant. Resopond within 20 words"
+        "content":"You are humble assitant. Resopond within 100 words"
     }
 )
+
+
+def stream_chat(history):
+    
+    stream = client.chat.completions.create(
+        model=os.getenv("MODEL"),
+        messages=history,
+        tools=TOOLS,
+        stream=True,
+    )
+    
+    full_response = ""
+    calls = {}
+    label_printed = False
+
+    for chunk in stream:
+        if not chunk:
+            continue
+
+        delta = chunk.choices[0].delta
+        
+        #1. Content Streaming : Do we have content from the LLM
+        if delta.content:
+
+            if not label_printed:
+                print("AI: ", end="", flush=True)
+                label_printed = True
+
+            print(delta.content, end="", flush=True)
+            full_response += delta.content
+
+
+        #2. Tool Calls : Is the LLM asking you to call a tool
+        for tc in (delta.tool_calls or []):
+            obj = calls.setdefault(
+                tc.index,
+                SimpleNamespace(id=None, function=SimpleNamespace(name="", arguments="")),
+            )
+            if tc.id:
+                obj.id = tc.id
+            if tc.function and tc.function.name:
+                obj.function.name += tc.function.name
+            if tc.function and tc.function.arguments:
+                obj.function.arguments += tc.function.arguments
+
+
+    if label_printed:
+        print()
+
+    calls_list = []
+    for key in sorted(calls):
+        calls_list.append(calls[key])
+    return full_response, calls_list
+
+
+def build_tool_calls_payload(tool_calls):
+    
+    """
+    builds are collected tool calls into the dict format
+    that the API expexts inside an assitant message.
+    """
+    payload = []
+    for tool_call in tool_calls:
+
+        payload.append(
+            {
+                "id": tool_call.id,
+                "type": "function",
+                "function": {
+                    "name": tool_call.function.name,
+                    "arguments": tool_call.function.arguments
+                }
+            }
+        )
+    return payload
+
+
 
 while True:
     user_input = input("Ravi: ")
@@ -40,53 +118,48 @@ while True:
     MAX_STEPS = 5
 
     #chained tool calling
-    for steps in range(MAX_STEPS):
+    try :
+        for steps in range(MAX_STEPS):
 
-        response = client.chat.completions.create( 
-            model=os.getenv("MODEL"),
-            messages=messages,
-            tools=TOOLS
-        )
+            full_response, tool_calls = stream_chat(messages)
 
-        msg = response.choices[0].message
-
-        if not msg.tool_calls:
-            break
+            if not tool_calls:
+                break
 
 
-        log(f"Step {steps+1}: model requested {len(msg.tool_calls)} tool calls")
-        
+            log(f"Step {steps+1}: model requested {len(tool_calls)} tool calls")
+            
 
-        messages.append(msg)
+            messages.append({
+                "role": "assistant",
+                "content": full_response,
+                "tool_calls": build_tool_calls_payload(tool_calls)
+            })
 
-        for tool_call in msg.tool_calls:
+            for tool_call in tool_calls:
 
-            result = execute_tool_call(tool_call)
+                result = execute_tool_call(tool_call)
 
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": str(result)
-                }
-            )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": str(result)
+                    }
+                )
+        else:
+            fallback = "Sorry i couldn't finish this within the steps limit"
+            messages.append({
+                "role":"assistant",
+                "content":fallback
+            })
 
-    else:
-        fallback = "Sorry i couldn't finish this within the steps limit"
-        messages.append({
-            "role":"assistant",
-            "content":fallback
-        })
+            print(f"AI:{fallback}")
+            continue
 
-        print(f"AI:{fallback}")
-        continue
+    except KeyboardInterrupt:
+        print("\nAI: Exiting...(Stopped by User)")
+        calls = {}
+        break
 
-
-    messages.append(
-        {
-            "role": "assistant",
-            "content": msg.content
-        }
-    )
-
-    print(f"AI: {msg.content or ''}")
+    
